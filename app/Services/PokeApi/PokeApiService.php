@@ -5,6 +5,8 @@ namespace App\Services\PokeApi;
 use App\Models\BannedPokemon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+//model z etapu 4
+use App\Models\CustomPokemon;
 
 class PokeApiService
 {
@@ -45,9 +47,34 @@ class PokeApiService
 
             $allowed[] = $v;
         }
+        //z etapu 4 - odpytywanie PokeApi tylko nie z custom
+        $allowedIds = array_values(array_filter($allowed, fn ($v) => is_int($v)));
+        $allowedNames = array_values(array_filter($allowed, fn ($v) => is_string($v)));
 
-        $responses = Http::pool(function ($pool) use ($allowed) {
-            foreach ($allowed as $v) {
+        $customById = CustomPokemon::query()
+            ->whereIn('pokemon_id', $allowedIds)
+            ->get()
+            ->keyBy('pokemon_id');
+
+        $customByName = CustomPokemon::query()
+            ->whereIn('name', $allowedNames)
+            ->get()
+            ->keyBy('name');
+        
+        $toPokeApi = [];
+
+        foreach ($allowed as $v) {
+            if (is_int($v) && $customById->has($v)) {
+                continue;
+            }
+            if (is_string($v) && $customByName->has($v)) {
+                continue;
+            }
+            $toPokeApi[] = $v;
+        }
+
+        $responses = Http::pool(function ($pool) use ($toPokeApi) {
+            foreach ($toPokeApi as $v) {
                 $pool->as((string) $v)->get($this->pokemonUrl($v));
             }
         });
@@ -57,13 +84,27 @@ class PokeApiService
 
         foreach ($allowed as $v) {
             $key = (string) $v;
-            $res = $responses[$key];
+            $res = $responses[$key] ?? null;
 
+            
+
+            // z etapu 4 -custom
+            if (is_int($v) && $customById->has($v)) {
+                $data[] = $this->mapCustom($customById->get($v));
+                continue;
+            }
+
+            if (is_string($v) && $customByName->has($v)) {
+                $data[] = $this->mapCustom($customByName->get($v));
+                continue;
+            }
+
+            //reszta bez zmian z PokeApi
             if ($res->status() === 404) {
                 $notFound[] = $v;
                 continue;
             }
-
+            
             if (!$res->ok()) {
                 // traktujemy jak not_found
                 $notFound[] = $v;
@@ -101,4 +142,30 @@ class PokeApiService
     {
         return 'https://pokeapi.co/api/v2/pokemon/' . urlencode((string) $idOrName);
     }
+    //z etapu 3
+    public function existsInPokeApi(string $name): bool
+    {
+    $res = Http::timeout(5)->get('https://pokeapi.co/api/v2/pokemon/' . urlencode($name));
+
+    if ($res->status() === 404) return false;
+
+    return $res->ok();
+    }
+    
+    //etap 4 - mapowanie customs
+     private function mapCustom(CustomPokemon $p): array
+    {
+        return [
+            'id' => $p->pokemon_id,
+            'name' => $p->name,
+            'height' => $p->height,
+            'weight' => $p->weight,
+            'types' => $p->types ?? [],
+            'sprites' => [
+                'front_default' => $p->sprite_url,
+            ],
+            'source' => 'custom',
+        ];
+    }
+
 }
