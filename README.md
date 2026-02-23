@@ -38,7 +38,7 @@ php artisan serve
 
 api bedzie dostępne pod http://localhost:8000/api
 
-## szybkie testy curl /api/banned
+## testy curl /api/banned
 
 curl -i "http://localhost:8000/api/banned" -H "Accept: application/json"     - 401 brak nagłówka
 
@@ -56,10 +56,16 @@ curl -i -X POST "http://localhost:8000/api/banned" \                         - d
   -H "X-SUPER-SECRET-KEY: abc123" \
   -d '{"pokemon_id":84,"pokemon_name":"pikachu"}'
 
-
 curl -s "http://localhost:8000/api/banned?search=pika&sort=-created_at&per_page=10" \        - lista zablokowanych z sortowaniem i filterm i ilością na stronę
   -H "Accept: application/json" \
   -H "X-SUPER-SECRET-KEY: abc123"
 echo
 
+## testy curl /api/info
+
+curl -i -X POST "http://localhost:8000/api/info" \             - pikachu według testów jest w tabeli banned_pokemons więć powinien być skipped , 999999 będzie skipped.not_found 
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"pokemons":["pikachu","charmander",999999]}'
+echo
 
