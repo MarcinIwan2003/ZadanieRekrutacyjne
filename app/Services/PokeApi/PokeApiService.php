@@ -3,10 +3,12 @@
 namespace App\Services\PokeApi;
 
 use App\Models\BannedPokemon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 //model z etapu 4
 use App\Models\CustomPokemon;
+//etap5
+use App\Models\PokemonApiCache;
+use Carbon\Carbon;
 
 class PokeApiService
 {
@@ -73,8 +75,24 @@ class PokeApiService
             $toPokeApi[] = $v;
         }
 
-        $responses = Http::pool(function ($pool) use ($toPokeApi) {
-            foreach ($toPokeApi as $v) {
+        $cachedByKey = $this->getCacheMany($toPokeApi);
+        $cachedSet = [];
+        $toFetch = [];
+
+        foreach ($toPokeApi as $v) {
+            $key = $this->cacheKey($v);
+
+                if (isset($cachedByKey[$key])) {
+                    $cachedSet[$key] = $cachedByKey[$key];
+                    continue;
+                }
+
+            $toFetch[] = $v;
+        
+        }
+
+        $responses = Http::pool(function ($pool) use ($toFetch) {
+            foreach ($toFetch as $v) {
                 $pool->as((string) $v)->get($this->pokemonUrl($v));
             }
         });
@@ -83,11 +101,7 @@ class PokeApiService
         $notFound = [];
 
         foreach ($allowed as $v) {
-            $key = (string) $v;
-            $res = $responses[$key] ?? null;
-
-            
-
+           
             // z etapu 4 -custom
             if (is_int($v) && $customById->has($v)) {
                 $data[] = $this->mapCustom($customById->get($v));
@@ -98,7 +112,18 @@ class PokeApiService
                 $data[] = $this->mapCustom($customByName->get($v));
                 continue;
             }
+            //etap 5
+            $ckey = $this->cacheKey($v);
 
+            if (isset($cachedSet[$ckey])) {
+                $data[] = $cachedSet[$ckey];
+                continue;
+            }
+
+            $key = (string) $v;
+            $res = $responses[$key] ?? null;
+
+            
             //reszta bez zmian z PokeApi
             if ($res->status() === 404) {
                 $notFound[] = $v;
@@ -114,7 +139,7 @@ class PokeApiService
             $json = $res->json();
 
         
-            $data[] = [
+            $payload = [
                 'id' => $json['id'],
                 'name' => $json['name'],
                 'height' => $json['height'],
@@ -126,7 +151,15 @@ class PokeApiService
                 'sprites' => [
                     'front_default' => $json['sprites']['front_default'] ?? null,
                 ],
+                'source' => 'pokeapi',
             ];
+
+            $data[] = $payload;
+
+            // etap 5 zapis cache
+            $this->putCache($json['id'], $payload);
+            $this->putCache($json['name'], $payload);
+        
         }
 
         return [
@@ -167,5 +200,54 @@ class PokeApiService
             'source' => 'custom',
         ];
     }
+
+    //etap4 - pomocnicze funkcja cacheowania
+        private function cacheKey(int|string $v): string
+        {
+            return is_int($v) ? (string) $v : mb_strtolower((string) $v);
+        }
+
+        private function getCacheMany(array $items): array
+        {
+            $keys = array_map(fn($v) => $this->cacheKey($v), $items);
+
+            $now = Carbon::now('Etc/GMT-1'); // stałe UTC+1
+
+            return PokemonApiCache::query()
+                ->whereIn('cache_key', $keys)
+                ->where('expires_at', '>', $now)
+                ->get()
+                ->mapWithKeys(fn($row) => [$row->cache_key => $row->payload])
+                ->all();
+        }
+
+        private function putCache(int|string $v, array $payload): void
+        {
+            $key = $this->cacheKey($v);
+
+            $now = Carbon::now('Etc/GMT-1');
+            $expiresAt = $this->nextNoonUtcPlus1($now);
+
+            PokemonApiCache::updateOrCreate(
+                ['cache_key' => $key],
+                [
+                    'normalized' => $key,
+                    'payload' => $payload,
+                    'fetched_at' => $now,
+                    'expires_at' => $expiresAt,
+                ]
+            );
+        }
+
+        private function nextNoonUtcPlus1(Carbon $now): Carbon
+        {
+            $noonToday = $now->copy()->setTime(12, 0, 0);
+
+                if ($now->lt($noonToday)) {
+                    return $noonToday;
+                }
+
+            return $noonToday->addDay();
+        }
 
 }

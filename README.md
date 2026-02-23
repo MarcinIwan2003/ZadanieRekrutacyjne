@@ -3,6 +3,9 @@
 REST API w Laravelu. 
 Etap 1: rejestr zakazanych pokemonów (`/api/banned`).  
 Etap 2: autoryzacja żądań do `/api/banned` przez nagłówek `X-SUPER-SECRET-KEY` klucz zapisany w env np. SUPER_SECRET_KEY=Luty2026.
+Etap 3: Pobieranie informacji o Pokémonach (/api/info).
+Etap 4: Własne Pokemony (CRUD) (/api/custom-pokemons).
+Etap 5: Cache danych z PokeAPI (dla /api/info).
 
 ## Wymagania środowiskowe
 - PHP 8.2+
@@ -68,7 +71,7 @@ echo
 
 ## testy curl /api/info
 
-curl -i -X POST "http://localhost:8000/api/info" \ 
+curl -i -X POST "http://localhost:8000/api/info" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{"pokemons":["pikachu","charmander",999999]}'
@@ -139,6 +142,20 @@ curl -i -X POST "http://localhost:8000/api/custom-pokemons" \
 echo
 - test blokady dodawania customowego pokemona gdy nazwy istnieje w PokeAPI
 
+## testy curl /api/custom-pokemons
+curl -i -X POST "http://localhost:8000/api/info" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"pokemons":["charmander"]}'
+echo
+- pierwsze wywołanie pójdzie do API i zapisze cache do tabeli pokemon_api_cache
+
+curl -i -X POST "http://localhost:8000/api/info" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"pokemons":["charmander"]}'
+echo
+- drugie wywołanie pójdzie już z cache
 
 
 
