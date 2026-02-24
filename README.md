@@ -6,6 +6,13 @@ Etap 2: autoryzacja żądań do `/api/banned` przez nagłówek `X-SUPER-SECRET-K
 Etap 3: Pobieranie informacji o Pokémonach (/api/info).
 Etap 4: Własne Pokemony (CRUD) (/api/custom-pokemons).
 Etap 5: Cache danych z PokeAPI (dla /api/info).
+Poza rekrutacją zostało przygotowane proste środowisko testowe dostępne publicznie (zarówno api jak i widok poglądowy)
+
+##Środowisko API:
+https://dev.matmartech.com/
+
+##Środowisko testowe (UI do testowania endpointów):
+https://zadanie.matmartech.com/
 
 ## Wymagania środowiskowe
 - PHP 8.2+
